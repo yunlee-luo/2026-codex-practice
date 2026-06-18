@@ -184,10 +184,22 @@ async function loadDashboard() {
 async function addExpense(event) {
   event.preventDefault();
 
+  const previousExpenses = state.expenses.slice();
+  const previousSummary = state.summary ? { ...state.summary } : null;
+  const previousEditingRowId = state.editingRowId;
+  const previousMonth = state.month;
+
   try {
     assertConfigured();
     const expense = getExpenseFromForm();
     const wasEditing = Boolean(state.editingRowId);
+    const optimisticExpense = {
+      ...expense,
+      rowId: wasEditing ? state.editingRowId : `temp-${Date.now()}`,
+      month: String(expense.date).slice(0, 7),
+      createdAt: new Date().toISOString(),
+      isHighExpense: Number(expense.amount || 0) >= Number(state.summary?.highExpenseThreshold || 0)
+    };
     const payload = {
       action: wasEditing ? 'updateExpense' : 'addExpense',
       expense
@@ -198,7 +210,13 @@ async function addExpense(event) {
     }
 
     console.log('[ExpenseApp] POST save expense payload:', payload);
-    setStatus(wasEditing ? '儲存修改中...' : '新增中...');
+    setStatus(wasEditing ? '正在儲存修改...' : '正在新增...');
+
+    state.month = String(expense.date).slice(0, 7);
+    elements.monthInput.value = state.month;
+    applyOptimisticSave(optimisticExpense, wasEditing);
+    resetFormMode();
+    setStatus(wasEditing ? '已先更新畫面，正在同步後端...' : '已先加入畫面，正在同步後端...');
 
     const postResponse = await requestApi('', {
       method: 'POST',
@@ -208,17 +226,42 @@ async function addExpense(event) {
 
     console.log('[ExpenseApp] POST save expense success response:', postResponse);
 
-    state.month = String(expense.date).slice(0, 7);
-    elements.monthInput.value = state.month;
-    resetFormMode();
+    if (!wasEditing && postResponse.data?.expense) {
+      replaceOptimisticExpense(optimisticExpense.rowId, postResponse.data.expense);
+    }
 
-    setStatus('已寫入，正在更新畫面...');
-    await refreshUntilExpenseVisible(postResponse.data?.expense || expense);
     setStatus(wasEditing ? '已儲存並更新畫面' : '已新增並更新畫面');
   } catch (error) {
     console.error('[ExpenseApp] addExpense failed:', error);
+    state.expenses = previousExpenses;
+    state.summary = previousSummary;
+    state.editingRowId = previousEditingRowId;
+    state.month = previousMonth;
+    elements.monthInput.value = previousMonth;
+    renderDashboard();
     showError(error.message || '儲存失敗');
   }
+}
+
+function applyOptimisticSave(expense, wasEditing) {
+  if (wasEditing) {
+    state.expenses = state.expenses.map(item => (
+      Number(item.rowId) === Number(expense.rowId) ? { ...item, ...expense } : item
+    ));
+  } else {
+    state.expenses = [expense, ...state.expenses];
+  }
+
+  refreshSummaryFromState();
+  renderDashboard();
+}
+
+function replaceOptimisticExpense(tempRowId, savedExpense) {
+  state.expenses = state.expenses.map(item => (
+    String(item.rowId) === String(tempRowId) ? savedExpense : item
+  ));
+  refreshSummaryFromState();
+  renderDashboard();
 }
 
 async function handleRowAction(event) {
@@ -246,13 +289,20 @@ async function deleteExpense(expense) {
   const confirmed = window.confirm(`確定要刪除 ${expense.date} 的 ${formatCategory(expense.category)} ${money.format(expense.amount || 0)} 嗎？`);
   if (!confirmed) return;
 
+  const previousExpenses = state.expenses.slice();
+  const previousSummary = state.summary ? { ...state.summary } : null;
+
   try {
     const payload = {
       action: 'deleteExpense',
       rowId: expense.rowId
     };
     console.log('[ExpenseApp] POST deleteExpense payload:', payload);
-    setStatus('刪除中...');
+    setStatus('已先從畫面移除，正在同步後端...');
+
+    state.expenses = state.expenses.filter(item => Number(item.rowId) !== Number(expense.rowId));
+    refreshSummaryFromState();
+    renderDashboard();
 
     const response = await requestApi('', {
       method: 'POST',
@@ -264,10 +314,12 @@ async function deleteExpense(expense) {
     if (state.editingRowId === expense.rowId) {
       resetFormMode();
     }
-    await loadDashboard();
     setStatus('已刪除並更新畫面');
   } catch (error) {
     console.error('[ExpenseApp] deleteExpense failed:', error);
+    state.expenses = previousExpenses;
+    state.summary = previousSummary;
+    renderDashboard();
     showError(error.message || '刪除失敗');
   }
 }
@@ -369,6 +421,15 @@ function applyDashboardData({ summary, expenses }) {
   state.summary = summary;
   state.expenses = expenses;
   renderDashboard();
+}
+
+function refreshSummaryFromState() {
+  state.summary = buildClientSummary(
+    state.month,
+    state.expenses,
+    new Date().toISOString(),
+    state.summary?.highExpenseThreshold || 0
+  );
 }
 
 async function requestApi(path, options = {}) {

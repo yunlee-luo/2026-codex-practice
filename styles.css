@@ -284,12 +284,12 @@ select:focus {
 }
 
 .table-wrap {
-  overflow: auto;
+  overflow-x: visible;
 }
 
 table {
   width: 100%;
-  min-width: 760px;
+  table-layout: fixed;
   border-collapse: collapse;
 }
 
@@ -299,6 +299,9 @@ td {
   padding: 12px 10px;
   text-align: left;
   vertical-align: top;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
 }
 
 th {
@@ -310,6 +313,36 @@ th {
 td.amount {
   font-weight: 700;
   text-align: right;
+}
+
+th:nth-child(1),
+td:nth-child(1) {
+  width: 88px;
+}
+
+th:nth-child(2),
+td:nth-child(2) {
+  width: 96px;
+}
+
+th:nth-child(3),
+td:nth-child(3) {
+  width: 88px;
+}
+
+th:nth-child(4),
+td:nth-child(4) {
+  width: 82px;
+}
+
+th:nth-child(5),
+td:nth-child(5) {
+  width: 112px;
+}
+
+th:nth-child(7),
+td:nth-child(7) {
+  width: 82px;
 }
 
 .empty-state {
