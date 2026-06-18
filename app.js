@@ -112,9 +112,10 @@ async function loadDashboard() {
     elements.refreshButton.disabled = true;
 
     const month = encodeURIComponent(state.month);
+    const cacheBust = encodeURIComponent(Date.now());
     const [summaryResponse, expensesResponse] = await Promise.all([
-      requestApi(`?action=monthlySummary&month=${month}`),
-      requestApi(`?action=listExpenses&month=${month}`)
+      requestApi(`?action=monthlySummary&month=${month}&_=${cacheBust}`),
+      requestApi(`?action=listExpenses&month=${month}&_=${cacheBust}`)
     ]);
 
     state.summary = summaryResponse.data;
@@ -142,10 +143,11 @@ async function addExpense(event) {
         ? form.get('cardName')
         : '';
 
+    const expenseDate = form.get('date');
     const payload = {
       action: 'addExpense',
       expense: {
-        date: form.get('date'),
+        date: expenseDate,
         category: form.get('category'),
         amount: Number(form.get('amount')),
         fee: form.get('fee') ? Number(form.get('fee')) : '',
@@ -162,18 +164,23 @@ async function addExpense(event) {
       body: JSON.stringify(payload)
     });
 
+    state.month = String(expenseDate).slice(0, 7);
+    elements.monthInput.value = state.month;
     elements.expenseForm.reset();
     elements.expenseForm.elements.date.value = formatDate(new Date());
     updatePaymentFields();
-    setStatus('已新增');
     await loadDashboard();
+    setStatus('已新增並更新畫面');
   } catch (error) {
     showError(error.message || '新增失敗');
   }
 }
 
 async function requestApi(path, options = {}) {
-  const response = await fetch(`${API_URL}${path}`, options);
+  const response = await fetch(`${API_URL}${path}`, {
+    cache: 'no-store',
+    ...options
+  });
   const json = await response.json();
 
   if (!response.ok || !json.ok) {
