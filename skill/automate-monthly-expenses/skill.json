@@ -1,0 +1,42 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "automate-monthly-expenses",
+  "version": "1.0.0",
+  "description": "Reusable skill module for deploying a Google Sheets-backed monthly expense automation website.",
+  "entrypoints": {
+    "instructions": "SKILL.md",
+    "apiSpec": "openapi.yaml"
+  },
+  "inputs": {
+    "expense": {
+      "type": "object",
+      "required": ["date", "amount", "category"],
+      "properties": {
+        "date": { "type": "string", "format": "date" },
+        "amount": { "type": "number", "exclusiveMinimum": 0 },
+        "currency": { "type": "string", "default": "TWD" },
+        "category": { "type": "string" },
+        "note": { "type": "string" },
+        "paymentMethod": { "type": "string" },
+        "vendor": { "type": "string" }
+      }
+    },
+    "month": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}$"
+    }
+  },
+  "outputs": {
+    "monthlySummary": {
+      "type": "object",
+      "properties": {
+        "month": { "type": "string" },
+        "total": { "type": "number" },
+        "currency": { "type": "string" },
+        "count": { "type": "integer" },
+        "highExpenseCount": { "type": "integer" },
+        "categories": { "type": "array" }
+      }
+    }
+  }
+}

@@ -1,0 +1,184 @@
+openapi: 3.1.0
+info:
+  title: Monthly Expense Automation API
+  version: 1.0.0
+  description: Google Apps Script Web App API for a Google Sheets-backed expense tracker.
+servers:
+  - url: https://script.google.com/macros/s/{deploymentId}/exec
+paths:
+  /:
+    get:
+      operationId: getMonthlyExpenseData
+      summary: Read expenses or monthly summary.
+      parameters:
+        - name: action
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [health, listExpenses, monthlySummary]
+        - name: month
+          in: query
+          required: false
+          description: Month in YYYY-MM format. Defaults to current month when omitted.
+          schema:
+            type: string
+            pattern: "^\\d{4}-\\d{2}$"
+      responses:
+        "200":
+          description: Successful structured response.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse"
+    post:
+      operationId: mutateMonthlyExpenseData
+      summary: Add an expense or run monthly automation.
+      requestBody:
+        required: true
+        content:
+          text/plain:
+            schema:
+              oneOf:
+                - $ref: "#/components/schemas/AddExpenseRequest"
+                - $ref: "#/components/schemas/RunMonthlyAutomationRequest"
+                - $ref: "#/components/schemas/SetupRequest"
+          application/json:
+            schema:
+              oneOf:
+                - $ref: "#/components/schemas/AddExpenseRequest"
+                - $ref: "#/components/schemas/RunMonthlyAutomationRequest"
+                - $ref: "#/components/schemas/SetupRequest"
+      responses:
+        "200":
+          description: Successful structured response.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse"
+components:
+  schemas:
+    ApiResponse:
+      type: object
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+        data:
+          type: object
+        error:
+          $ref: "#/components/schemas/ApiError"
+        meta:
+          $ref: "#/components/schemas/ApiMeta"
+    ApiError:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+    ApiMeta:
+      type: object
+      properties:
+        version:
+          type: string
+        generatedAt:
+          type: string
+          format: date-time
+    AddExpenseRequest:
+      type: object
+      required: [action, expense]
+      properties:
+        action:
+          type: string
+          const: addExpense
+        expense:
+          $ref: "#/components/schemas/ExpenseInput"
+    RunMonthlyAutomationRequest:
+      type: object
+      required: [action, month]
+      properties:
+        action:
+          type: string
+          const: runMonthlyAutomation
+        month:
+          type: string
+          pattern: "^\\d{4}-\\d{2}$"
+    SetupRequest:
+      type: object
+      required: [action]
+      properties:
+        action:
+          type: string
+          const: setup
+    ExpenseInput:
+      type: object
+      required: [date, amount, category]
+      properties:
+        date:
+          type: string
+          format: date
+        amount:
+          type: number
+          exclusiveMinimum: 0
+        currency:
+          type: string
+          default: TWD
+        category:
+          type: string
+        note:
+          type: string
+        paymentMethod:
+          type: string
+        vendor:
+          type: string
+    Expense:
+      allOf:
+        - $ref: "#/components/schemas/ExpenseInput"
+        - type: object
+          required: [id, month, isHighExpense, createdAt, updatedAt]
+          properties:
+            id:
+              type: string
+            month:
+              type: string
+            isHighExpense:
+              type: boolean
+            createdAt:
+              type: string
+              format: date-time
+            updatedAt:
+              type: string
+              format: date-time
+    MonthlySummary:
+      type: object
+      required: [month, total, currency, count, highExpenseCount, categories, updatedAt]
+      properties:
+        month:
+          type: string
+        total:
+          type: number
+        currency:
+          type: string
+        count:
+          type: integer
+        highExpenseCount:
+          type: integer
+        highExpenseThreshold:
+          type: number
+        categories:
+          type: array
+          items:
+            type: object
+            required: [category, total, percentage]
+            properties:
+              category:
+                type: string
+              total:
+                type: number
+              percentage:
+                type: number
+        updatedAt:
+          type: string
+          format: date-time

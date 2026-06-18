@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>每月支出整理</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Expense Automation</p>
+          <h1>每月支出整理</h1>
+        </div>
+        <label class="month-picker">
+          <span>月份</span>
+          <input id="monthInput" type="month">
+        </label>
+      </header>
+
+      <section class="dashboard-grid" aria-label="支出看板">
+        <div class="metric-panel">
+          <span class="panel-label">本月目前總支出</span>
+          <strong id="totalAmount">NT$0</strong>
+          <small id="expenseCount">0 筆紀錄</small>
+        </div>
+        <div class="metric-panel">
+          <span class="panel-label">高額支出</span>
+          <strong id="highExpenseCount">0</strong>
+          <small id="thresholdText">門檻載入中</small>
+        </div>
+        <div class="ratio-panel">
+          <div class="panel-heading">
+            <span class="panel-label">各類別佔比</span>
+            <button id="refreshButton" type="button">重新整理</button>
+          </div>
+          <div id="categoryBreakdown" class="category-list"></div>
+        </div>
+      </section>
+
+      <section class="workspace-grid">
+        <form id="expenseForm" class="expense-form">
+          <div class="panel-heading">
+            <h2>新增支出</h2>
+            <span id="formStatus" role="status"></span>
+          </div>
+          <div class="form-grid">
+            <label>
+              <span>日期</span>
+              <input name="date" type="date" required>
+            </label>
+            <label>
+              <span>金額</span>
+              <input name="amount" type="number" min="1" step="1" inputmode="decimal" required>
+            </label>
+            <label>
+              <span>類別</span>
+              <select name="category" required>
+                <option value="">選擇類別</option>
+                <option>餐飲</option>
+                <option>交通</option>
+                <option>購物</option>
+                <option>娛樂</option>
+                <option>居家</option>
+                <option>醫療</option>
+                <option>學習</option>
+                <option>其他</option>
+              </select>
+            </label>
+            <label>
+              <span>付款方式</span>
+              <input name="paymentMethod" type="text" placeholder="信用卡、現金、轉帳">
+            </label>
+            <label>
+              <span>商家</span>
+              <input name="vendor" type="text" placeholder="店名或平台">
+            </label>
+            <label class="wide">
+              <span>備註</span>
+              <input name="note" type="text" placeholder="可留空">
+            </label>
+          </div>
+          <button class="primary-action" type="submit">加入支出</button>
+        </form>
+
+        <section class="recent-panel">
+          <div class="panel-heading">
+            <h2>本月紀錄</h2>
+            <span id="lastUpdated"></span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>日期</th>
+                  <th>類別</th>
+                  <th>金額</th>
+                  <th>備註</th>
+                </tr>
+              </thead>
+              <tbody id="expenseRows"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

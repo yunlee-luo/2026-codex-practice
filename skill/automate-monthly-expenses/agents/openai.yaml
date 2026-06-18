@@ -1,0 +1,3 @@
+display_name: Monthly Expense Automation
+short_description: Build a Google Sheets-backed automated monthly expense tracker.
+default_prompt: Create or adapt an automated monthly expense tracker with Apps Script API endpoints, a static dashboard, monthly summaries, and high-expense detection.
