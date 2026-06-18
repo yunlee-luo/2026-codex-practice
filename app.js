@@ -71,6 +71,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function renderCategoryOptions() {
+  elements.categorySelect.innerHTML = '<option value="">選擇類別</option>';
   const options = Object.entries(CATEGORY_EMOJIS)
     .map(([category, emoji]) => `<option value="${escapeHtml(category)}">${emoji} ${escapeHtml(category)}</option>`)
     .join('');
@@ -111,19 +112,14 @@ async function loadDashboard() {
     setStatus('資料載入中...');
     elements.refreshButton.disabled = true;
 
-    const month = encodeURIComponent(state.month);
-    const cacheBust = encodeURIComponent(Date.now());
-    const [summaryResponse, expensesResponse] = await Promise.all([
-      requestApi(`?action=monthlySummary&month=${month}&_=${cacheBust}`),
-      requestApi(`?action=listExpenses&month=${month}&_=${cacheBust}`)
-    ]);
-
-    state.summary = summaryResponse.data;
-    state.expenses = expensesResponse.data.expenses || [];
-    renderDashboard();
+    const dashboardData = await fetchDashboardData(state.month);
+    applyDashboardData(dashboardData);
     setStatus('');
+    return dashboardData;
   } catch (error) {
+    console.error('[ExpenseApp] loadDashboard failed:', error);
     showError(error.message || '資料載入失敗');
+    return null;
   } finally {
     state.loading = false;
     elements.refreshButton.disabled = false;
@@ -157,31 +153,109 @@ async function addExpense(event) {
       }
     };
 
+    console.log('[ExpenseApp] POST addExpense payload:', payload);
     setStatus('新增中...');
-    await requestApi('', {
+
+    const postResponse = await requestApi('', {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(payload)
     });
+
+    console.log('[ExpenseApp] POST addExpense success response:', postResponse);
 
     state.month = String(expenseDate).slice(0, 7);
     elements.monthInput.value = state.month;
     elements.expenseForm.reset();
     elements.expenseForm.elements.date.value = formatDate(new Date());
     updatePaymentFields();
-    await loadDashboard();
+
+    setStatus('已寫入，正在更新畫面...');
+    await refreshUntilExpenseVisible(postResponse.data?.expense || payload.expense);
     setStatus('已新增並更新畫面');
   } catch (error) {
+    console.error('[ExpenseApp] addExpense failed:', error);
     showError(error.message || '新增失敗');
   }
 }
 
+async function refreshUntilExpenseVisible(expectedExpense) {
+  const maxAttempts = 5;
+  const waitMs = 700;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    console.log(`[ExpenseApp] Refresh attempt ${attempt}/${maxAttempts}`, {
+      month: state.month,
+      expectedExpense
+    });
+
+    const dashboardData = await fetchDashboardData(state.month);
+    applyDashboardData(dashboardData);
+
+    if (!expectedExpense || hasMatchingExpense(dashboardData.expenses, expectedExpense)) {
+      console.log('[ExpenseApp] Latest expense is visible after refresh:', {
+        attempt,
+        expenses: dashboardData.expenses
+      });
+      return true;
+    }
+
+    await delay(waitMs);
+  }
+
+  console.warn('[ExpenseApp] Latest expense was not found after retries. Rendered the newest data returned by API.');
+  return false;
+}
+
+async function fetchDashboardData(month) {
+  const encodedMonth = encodeURIComponent(month);
+  const summaryPath = addCacheBust(`?action=monthlySummary&month=${encodedMonth}`);
+  const expensesPath = addCacheBust(`?action=listExpenses&month=${encodedMonth}`);
+
+  console.log('[ExpenseApp] GET dashboard request paths:', {
+    summaryPath,
+    expensesPath
+  });
+
+  const [summaryResponse, expensesResponse] = await Promise.all([
+    requestApi(summaryPath),
+    requestApi(expensesPath)
+  ]);
+
+  console.log('[ExpenseApp] GET monthlySummary JSON:', summaryResponse);
+  console.log('[ExpenseApp] GET listExpenses JSON:', expensesResponse);
+
+  return {
+    summary: summaryResponse.data || emptySummary(),
+    expenses: expensesResponse.data?.expenses || []
+  };
+}
+
+function applyDashboardData({ summary, expenses }) {
+  state.summary = summary;
+  state.expenses = expenses;
+  renderDashboard();
+}
+
 async function requestApi(path, options = {}) {
-  const response = await fetch(`${API_URL}${path}`, {
+  const url = `${API_URL}${path}`;
+  console.log('[ExpenseApp] Fetch start:', {
+    url,
+    method: options.method || 'GET'
+  });
+
+  const response = await fetch(url, {
     cache: 'no-store',
     ...options
   });
+
   const json = await response.json();
+  console.log('[ExpenseApp] Fetch response:', {
+    url,
+    status: response.status,
+    ok: response.ok,
+    json
+  });
 
   if (!response.ok || !json.ok) {
     const message = json.error?.message || `API 錯誤：${response.status}`;
@@ -189,6 +263,12 @@ async function requestApi(path, options = {}) {
   }
 
   return json;
+}
+
+function addCacheBust(path) {
+  const separator = path.includes('?') ? '&' : '?';
+  const nonce = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return `${path}${separator}t=${encodeURIComponent(nonce)}`;
 }
 
 function renderDashboard() {
@@ -204,6 +284,8 @@ function renderDashboard() {
 }
 
 function renderCategories(categories) {
+  elements.categoryBreakdown.innerHTML = '';
+
   if (!categories.length) {
     elements.categoryBreakdown.innerHTML = '<p class="empty-state">這個月份還沒有支出資料</p>';
     return;
@@ -229,6 +311,8 @@ function renderCategories(categories) {
 }
 
 function renderRows(expenses) {
+  elements.expenseRows.innerHTML = '';
+
   if (!expenses.length) {
     elements.expenseRows.innerHTML = '<tr><td colspan="6" class="empty-state">尚無紀錄</td></tr>';
     return;
@@ -250,13 +334,24 @@ function renderRows(expenses) {
     .join('');
 }
 
+function hasMatchingExpense(expenses, expectedExpense) {
+  return expenses.some(expense => (
+    String(expense.date || '') === String(expectedExpense.date || '') &&
+    String(expense.category || '') === String(expectedExpense.category || '') &&
+    Number(expense.amount || 0) === Number(expectedExpense.amount || 0) &&
+    String(expense.paymentMethod || '') === String(expectedExpense.paymentMethod || '') &&
+    String(expense.bankCardName || '') === String(expectedExpense.bankCardName || '') &&
+    String(expense.note || '') === String(expectedExpense.note || '')
+  ));
+}
+
 function setStatus(message) {
   elements.formStatus.textContent = message;
 }
 
 function showError(message) {
   setStatus(message);
-  console.error(message);
+  console.error('[ExpenseApp]', message);
 }
 
 function emptySummary() {
@@ -286,6 +381,12 @@ function formatDate(date) {
 
 function formatMonth(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function delay(ms) {
+  return new Promise(resolve => {
+    window.setTimeout(resolve, ms);
+  });
 }
 
 function escapeHtml(value) {
