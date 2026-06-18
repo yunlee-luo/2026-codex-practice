@@ -123,7 +123,7 @@ function addExpense_(input) {
   const createdAt = nowIso_();
   const row = [
     expense.date,
-    monthFromDate_(expense.date),
+    "'" + monthFromDate_(expense.date),
     expense.category,
     expense.amount,
     expense.fee,
@@ -234,7 +234,7 @@ function buildMonthlySummaryFromExpenses_(month, expenses) {
 
 function rowToExpense_(row) {
   const date = normalizeSheetDate_(row[0]);
-  const month = String(row[1] || monthFromDate_(date));
+  const month = normalizeSheetMonth_(row[1], date);
   const amount = Number(row[3] || 0);
   const fee = row[4] === '' || row[4] === null ? '' : Number(row[4] || 0);
 
@@ -411,6 +411,17 @@ function normalizeSheetDate_(value) {
   const text = String(value || '').trim();
   if (/^\d{4}-\d{2}-\d{2}/.test(text)) return text.slice(0, 10);
   return text;
+}
+
+function normalizeSheetMonth_(value, fallbackDate) {
+  if (Object.prototype.toString.call(value) === '[object Date]') {
+    return Utilities.formatDate(value, CONFIG.TIMEZONE, 'yyyy-MM');
+  }
+
+  const text = String(value || '').trim().replace(/^'/, '');
+  if (/^\d{4}-\d{2}/.test(text)) return text.slice(0, 7);
+
+  return monthFromDate_(fallbackDate);
 }
 
 function normalizeSheetDateTime_(value) {
