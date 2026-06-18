@@ -57,7 +57,7 @@ runMonthlyAutomation_("2026-06");
 
 ## 3. 前端網站
 
-打開 `frontend/app.js`，把：
+打開根目錄的 `app.js`，把：
 
 ```javascript
 const API_URL = 'PASTE_YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL_HERE';
@@ -65,7 +65,7 @@ const API_URL = 'PASTE_YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL_HERE';
 
 替換成 Apps Script Web App URL。
 
-前端是純靜態網站，可直接部署到 GitHub Pages。功能包含：
+前端是純靜態網站，`index.html`、`styles.css`、`app.js` 已放在 repo 根目錄，可直接讓 GitHub Pages 從根目錄讀取。功能包含：
 
 - 快速新增支出
 - 本月總支出

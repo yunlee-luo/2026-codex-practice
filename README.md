@@ -28,7 +28,7 @@ The active rules allow:
 - `.gitignore`: local files and secret exclusions
 - `docs/expense-automation.md`: Google Sheets monthly expense automation setup guide
 - `apps-script/`: Google Apps Script backend for expense tracking
-- `frontend/`: static expense dashboard
+- `index.html`, `styles.css`, `app.js`: static expense dashboard for GitHub Pages from the repository root
 - `skill/automate-monthly-expenses/`: reusable Skill package and OpenAPI contract
 
 ## Verified Test

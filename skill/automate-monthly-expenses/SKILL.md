@@ -13,7 +13,7 @@ Use this skill to create a reusable Google Sheets + Apps Script + static fronten
    `id,date,amount,currency,category,note,paymentMethod,vendor,month,isHighExpense,createdAt,updatedAt`.
 2. Add `Settings` with `key,value`, `defaultCurrency,TWD`, and `highExpenseThreshold,5000`.
 3. Paste the Apps Script backend from `apps-script/Code.gs`, deploy it as a Web App, and use the deployment URL as the frontend API URL.
-4. Configure the frontend `API_URL`, then deploy the `frontend/` folder to a static host such as GitHub Pages, Netlify, Vercel, or Cloudflare Pages.
+4. Configure the frontend `API_URL`, then deploy the root-level `index.html`, `styles.css`, and `app.js` to GitHub Pages, Netlify, Vercel, Cloudflare Pages, or another static host.
 5. Run `createMonthEndTrigger()` once in Apps Script to install a monthly time-driven trigger.
 6. Validate API output shape against `openapi.yaml` before connecting another agent or platform.
 
