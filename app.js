@@ -48,8 +48,7 @@ const elements = {
   transferFeeField: document.querySelector('#transferFeeField'),
   transferBankField: document.querySelector('#transferBankField'),
   cardNameField: document.querySelector('#cardNameField'),
-  submitButton: document.querySelector('#submitButton'),
-  cancelEditButton: document.querySelector('#cancelEditButton')
+  submitButton: document.querySelector('#submitButton')
 };
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -69,7 +68,6 @@ document.addEventListener('DOMContentLoaded', () => {
   elements.paymentMethodSelect.addEventListener('change', updatePaymentFields);
   elements.refreshButton.addEventListener('click', loadDashboard);
   elements.expenseForm.addEventListener('submit', addExpense);
-  elements.cancelEditButton.addEventListener('click', resetFormMode);
   elements.expenseRows.addEventListener('click', handleRowAction);
 
   loadDashboard();
@@ -150,7 +148,6 @@ function enterEditMode(expense) {
   }
 
   elements.submitButton.textContent = '儲存修改';
-  elements.cancelEditButton.classList.remove('is-hidden');
   setStatus(`正在編輯第 ${expense.rowId} 列`);
   elements.expenseForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
@@ -161,7 +158,6 @@ function resetFormMode() {
   elements.expenseForm.elements.date.value = formatDate(new Date());
   updatePaymentFields();
   elements.submitButton.textContent = '加入支出';
-  elements.cancelEditButton.classList.add('is-hidden');
 }
 
 async function loadDashboard() {
@@ -470,8 +466,8 @@ function renderRows(expenses) {
         <td>${escapeHtml(expense.note || '')}</td>
         <td>
           <div class="row-actions">
-            <button class="row-action" type="button" data-action="edit" data-row-id="${escapeHtml(expense.rowId)}">編輯</button>
-            <button class="row-action danger" type="button" data-action="delete" data-row-id="${escapeHtml(expense.rowId)}">刪除</button>
+            <button class="row-action icon-button" type="button" data-action="edit" data-row-id="${escapeHtml(expense.rowId)}" aria-label="編輯" title="編輯">✏️</button>
+            <button class="row-action icon-button danger" type="button" data-action="delete" data-row-id="${escapeHtml(expense.rowId)}" aria-label="刪除" title="刪除">🗑️</button>
           </div>
         </td>
       </tr>

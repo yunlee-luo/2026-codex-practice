@@ -233,9 +233,6 @@ select:focus {
 }
 
 .form-actions {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 12px;
   margin-top: 18px;
 }
 
@@ -259,21 +256,31 @@ select:focus {
 
 .row-actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   white-space: nowrap;
 }
 
 .row-action {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
   min-height: 34px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface-soft);
   color: var(--ink);
-  padding: 6px 10px;
+  padding: 0;
+  line-height: 1;
 }
 
 .row-action.danger {
   color: var(--warning);
+}
+
+.icon-button:hover {
+  border-color: var(--accent);
+  background: #ffffff;
 }
 
 .table-wrap {
