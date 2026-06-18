@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="自動化整理每月支出的 Google Sheets 記帳看板">
+    <meta name="description" content="自動整理每月支出的 Google Sheets 記帳看板">
     <title>每月支出自動整理</title>
     <link rel="stylesheet" href="./styles.css">
   </head>
@@ -62,34 +62,42 @@
             </label>
 
             <label>
+              <span>類別</span>
+              <select id="categorySelect" name="category" required>
+                <option value="">選擇類別</option>
+              </select>
+            </label>
+
+            <label>
               <span>金額</span>
               <input name="amount" type="number" min="1" step="1" inputmode="decimal" placeholder="例如 120" required>
             </label>
 
             <label>
-              <span>類別</span>
-              <select name="category" required>
-                <option value="">選擇類別</option>
-                <option value="餐飲">餐飲</option>
-                <option value="交通">交通</option>
-                <option value="購物">購物</option>
-                <option value="娛樂">娛樂</option>
-                <option value="居家">居家</option>
-                <option value="醫療">醫療</option>
-                <option value="學習">學習</option>
-                <option value="訂閱">訂閱</option>
+              <span>付款方式</span>
+              <select id="paymentMethodSelect" name="paymentMethod" required>
+                <option value="">選擇付款方式</option>
+                <option value="現金">現金</option>
+                <option value="轉帳">轉帳</option>
+                <option value="信用卡">信用卡</option>
+                <option value="行動支付">行動支付</option>
                 <option value="其他">其他</option>
               </select>
             </label>
 
-            <label>
-              <span>付款方式</span>
-              <input name="paymentMethod" type="text" placeholder="信用卡、現金、轉帳">
+            <label id="transferFeeField" class="conditional-field is-hidden">
+              <span>手續費</span>
+              <input name="fee" type="number" min="0" step="1" inputmode="decimal" placeholder="例如 15">
             </label>
 
-            <label>
-              <span>商家</span>
-              <input name="vendor" type="text" placeholder="店名或平台">
+            <label id="transferBankField" class="conditional-field is-hidden">
+              <span>轉帳銀行</span>
+              <input name="transferBank" type="text" placeholder="例如 台新銀行">
+            </label>
+
+            <label id="cardNameField" class="conditional-field is-hidden">
+              <span>卡片名稱</span>
+              <input name="cardName" type="text" placeholder="例如 富邦 J 卡">
             </label>
 
             <label class="wide">
@@ -105,7 +113,7 @@
           <div class="panel-heading">
             <div>
               <h2>本月紀錄</h2>
-              <p class="panel-subtitle">高額支出會以醒目顏色標示</p>
+              <p class="panel-subtitle">資料欄位與 Google Sheet 欄位保持同步</p>
             </div>
             <span id="lastUpdated"></span>
           </div>
@@ -117,12 +125,14 @@
                   <th>日期</th>
                   <th>類別</th>
                   <th>金額</th>
+                  <th>付款方式</th>
+                  <th>銀行/卡片</th>
                   <th>備註</th>
                 </tr>
               </thead>
               <tbody id="expenseRows">
                 <tr>
-                  <td colspan="4" class="empty-state">資料載入中</td>
+                  <td colspan="6" class="empty-state">資料載入中</td>
                 </tr>
               </tbody>
             </table>

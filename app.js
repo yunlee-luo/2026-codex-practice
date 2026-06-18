@@ -1,5 +1,22 @@
 const API_URL = 'https://script.google.com/macros/s/AKfycbxq6nVaVZ74Loi4crbCkO5j8jg_gJYWfvYgI6ilJHxXGA_v7RP8fcZF-2lVEcp9GUzKuw/exec';
 
+const CATEGORY_EMOJIS = {
+  '食品': '🍔',
+  '交通': '🚗',
+  '雜支': '🛒',
+  '書籍': '📚',
+  '用品': '🧻',
+  '房租': '🏠',
+  '水電': '⚡',
+  '通信': '📱',
+  '衣物': '👕',
+  '學費': '🎓',
+  '儲蓄': '💰',
+  '娛樂': '🎵',
+  '旅遊': '✈️',
+  '其他': '✨'
+};
+
 const state = {
   month: '',
   summary: null,
@@ -24,7 +41,12 @@ const elements = {
   expenseForm: document.querySelector('#expenseForm'),
   formStatus: document.querySelector('#formStatus'),
   refreshButton: document.querySelector('#refreshButton'),
-  lastUpdated: document.querySelector('#lastUpdated')
+  lastUpdated: document.querySelector('#lastUpdated'),
+  categorySelect: document.querySelector('#categorySelect'),
+  paymentMethodSelect: document.querySelector('#paymentMethodSelect'),
+  transferFeeField: document.querySelector('#transferFeeField'),
+  transferBankField: document.querySelector('#transferBankField'),
+  cardNameField: document.querySelector('#cardNameField')
 };
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -33,16 +55,54 @@ document.addEventListener('DOMContentLoaded', () => {
   elements.monthInput.value = state.month;
   elements.expenseForm.elements.date.value = formatDate(today);
 
+  renderCategoryOptions();
+  updatePaymentFields();
+
   elements.monthInput.addEventListener('change', () => {
     state.month = elements.monthInput.value;
     loadDashboard();
   });
 
+  elements.paymentMethodSelect.addEventListener('change', updatePaymentFields);
   elements.refreshButton.addEventListener('click', loadDashboard);
   elements.expenseForm.addEventListener('submit', addExpense);
 
   loadDashboard();
 });
+
+function renderCategoryOptions() {
+  const options = Object.entries(CATEGORY_EMOJIS)
+    .map(([category, emoji]) => `<option value="${escapeHtml(category)}">${emoji} ${escapeHtml(category)}</option>`)
+    .join('');
+  elements.categorySelect.insertAdjacentHTML('beforeend', options);
+}
+
+function updatePaymentFields() {
+  const method = elements.paymentMethodSelect.value;
+  const isTransfer = method === '轉帳';
+  const isCreditCard = method === '信用卡';
+
+  toggleField(elements.transferFeeField, isTransfer);
+  toggleField(elements.transferBankField, isTransfer);
+  toggleField(elements.cardNameField, isCreditCard);
+
+  elements.expenseForm.elements.fee.required = false;
+  elements.expenseForm.elements.transferBank.required = isTransfer;
+  elements.expenseForm.elements.cardName.required = isCreditCard;
+
+  if (!isTransfer) {
+    elements.expenseForm.elements.fee.value = '';
+    elements.expenseForm.elements.transferBank.value = '';
+  }
+
+  if (!isCreditCard) {
+    elements.expenseForm.elements.cardName.value = '';
+  }
+}
+
+function toggleField(field, shouldShow) {
+  field.classList.toggle('is-hidden', !shouldShow);
+}
 
 async function loadDashboard() {
   try {
@@ -75,16 +135,23 @@ async function addExpense(event) {
   try {
     assertConfigured();
     const form = new FormData(elements.expenseForm);
+    const paymentMethod = form.get('paymentMethod');
+    const bankCardName = paymentMethod === '轉帳'
+      ? form.get('transferBank')
+      : paymentMethod === '信用卡'
+        ? form.get('cardName')
+        : '';
+
     const payload = {
       action: 'addExpense',
       expense: {
         date: form.get('date'),
-        amount: Number(form.get('amount')),
-        currency: 'TWD',
         category: form.get('category'),
-        paymentMethod: form.get('paymentMethod'),
-        vendor: form.get('vendor'),
-        note: form.get('note')
+        amount: Number(form.get('amount')),
+        fee: form.get('fee') ? Number(form.get('fee')) : '',
+        paymentMethod,
+        bankCardName,
+        note: form.get('note') || ''
       }
     };
 
@@ -97,6 +164,7 @@ async function addExpense(event) {
 
     elements.expenseForm.reset();
     elements.expenseForm.elements.date.value = formatDate(new Date());
+    updatePaymentFields();
     setStatus('已新增');
     await loadDashboard();
   } catch (error) {
@@ -137,21 +205,25 @@ function renderCategories(categories) {
   elements.categoryBreakdown.innerHTML = categories
     .slice()
     .sort((a, b) => b.total - a.total)
-    .map(item => `
-      <div class="category-item">
-        <strong title="${escapeHtml(item.category)}">${escapeHtml(item.category)}</strong>
-        <div class="bar-track" aria-hidden="true">
-          <div class="bar-fill" style="width: ${Math.min(Number(item.percentage) || 0, 100)}%"></div>
+    .map(item => {
+      const label = formatCategory(item.category);
+      const percentage = Math.min(Number(item.percentage) || 0, 100);
+      return `
+        <div class="category-item">
+          <strong title="${escapeHtml(label)}">${escapeHtml(label)}</strong>
+          <div class="bar-track" aria-hidden="true">
+            <div class="bar-fill" style="width: ${percentage}%"></div>
+          </div>
+          <span class="category-total">${money.format(item.total || 0)} · ${item.percentage || 0}%</span>
         </div>
-        <span class="category-total">${money.format(item.total || 0)} · ${item.percentage || 0}%</span>
-      </div>
-    `)
+      `;
+    })
     .join('');
 }
 
 function renderRows(expenses) {
   if (!expenses.length) {
-    elements.expenseRows.innerHTML = '<tr><td colspan="4" class="empty-state">尚無紀錄</td></tr>';
+    elements.expenseRows.innerHTML = '<tr><td colspan="6" class="empty-state">尚無紀錄</td></tr>';
     return;
   }
 
@@ -161,9 +233,11 @@ function renderRows(expenses) {
     .map(expense => `
       <tr class="${expense.isHighExpense ? 'high-expense' : ''}">
         <td>${escapeHtml(expense.date)}</td>
-        <td>${escapeHtml(expense.category)}</td>
+        <td>${escapeHtml(formatCategory(expense.category))}</td>
         <td class="amount">${money.format(expense.amount || 0)}</td>
-        <td>${escapeHtml(expense.note || expense.vendor || '')}</td>
+        <td>${escapeHtml(expense.paymentMethod || '')}</td>
+        <td>${escapeHtml(expense.bankCardName || '')}</td>
+        <td>${escapeHtml(expense.note || '')}</td>
       </tr>
     `)
     .join('');
@@ -191,8 +265,12 @@ function emptySummary() {
 
 function assertConfigured() {
   if (!API_URL || API_URL.includes('PASTE_YOUR')) {
-    throw new Error('請先在 frontend/app.js 填入 Google Apps Script Web App URL');
+    throw new Error('請先在 app.js 填入 Google Apps Script Web App URL');
   }
+}
+
+function formatCategory(category) {
+  return CATEGORY_EMOJIS[category] ? `${CATEGORY_EMOJIS[category]} ${category}` : category;
 }
 
 function formatDate(date) {

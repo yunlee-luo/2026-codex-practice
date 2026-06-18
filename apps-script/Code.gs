@@ -1,25 +1,21 @@
 const CONFIG = {
   EXPENSE_SHEET: 'Expenses',
   SETTINGS_SHEET: 'Settings',
-  SUMMARY_PREFIX: 'Summary_',
   DEFAULT_CURRENCY: 'TWD',
   DEFAULT_HIGH_EXPENSE_THRESHOLD: 5000,
   TIMEZONE: Session.getScriptTimeZone() || 'Asia/Taipei'
 };
 
 const EXPENSE_HEADERS = [
-  'id',
-  'date',
-  'amount',
-  'currency',
-  'category',
-  'note',
-  'paymentMethod',
-  'vendor',
-  'month',
-  'isHighExpense',
-  'createdAt',
-  'updatedAt'
+  '日期',
+  '月份(自動)',
+  '類別',
+  '金額',
+  '手續費',
+  '付款方式',
+  '銀行/卡片名稱',
+  '備註',
+  '建立時間'
 ];
 
 function doGet(e) {
@@ -38,7 +34,7 @@ function handleRequest_(method, e) {
     const action = params.action || (method === 'GET' ? 'monthlySummary' : 'addExpense');
 
     if (method === 'GET' && action === 'health') {
-      return jsonResponse_({ ok: true, data: { status: 'ok' } });
+      return jsonResponse_({ ok: true, data: { status: 'ok' }, meta: responseMeta_() });
     }
 
     if (method === 'GET' && action === 'listExpenses') {
@@ -68,12 +64,12 @@ function handleRequest_(method, e) {
       });
     }
 
-    if (method === 'POST' && action === 'runMonthlyAutomation') {
-      const month = normalizeMonth_(params.month || previousMonth_());
-      const summary = runMonthlyAutomation_(month);
+    if (method === 'POST' && action === 'generateMonthlyReport') {
+      const month = normalizeMonth_(params.month || currentMonth_());
+      const report = generateMonthlyReport(month);
       return jsonResponse_({
         ok: true,
-        data: summary,
+        data: report,
         meta: responseMeta_()
       });
     }
@@ -103,20 +99,16 @@ function handleRequest_(method, e) {
 function addExpense_(input) {
   const expense = normalizeExpense_(input);
   const sheet = SpreadsheetApp.getActive().getSheetByName(CONFIG.EXPENSE_SHEET);
-  const now = nowIso_();
   const row = [
-    expense.id || Utilities.getUuid(),
     expense.date,
-    expense.amount,
-    expense.currency || CONFIG.DEFAULT_CURRENCY,
-    expense.category,
-    expense.note || '',
-    expense.paymentMethod || '',
-    expense.vendor || '',
     monthFromDate_(expense.date),
-    expense.amount >= getHighExpenseThreshold_(),
-    now,
-    now
+    expense.category,
+    expense.amount,
+    expense.fee,
+    expense.paymentMethod,
+    expense.bankCardName,
+    expense.note,
+    nowIso_()
   ];
   sheet.appendRow(row);
   return rowToExpense_(row);
@@ -128,22 +120,25 @@ function normalizeExpense_(input) {
   }
 
   const amount = Number(input.amount);
+  const fee = input.fee === '' || input.fee === undefined || input.fee === null ? '' : Number(input.fee);
   const date = normalizeDate_(input.date || today_());
   const category = String(input.category || '').trim();
+  const paymentMethod = String(input.paymentMethod || '').trim();
 
   if (!date) throw apiError_('VALIDATION_ERROR', 'date must be YYYY-MM-DD.', 400);
-  if (!Number.isFinite(amount) || amount <= 0) throw apiError_('VALIDATION_ERROR', 'amount must be a positive number.', 400);
   if (!category) throw apiError_('VALIDATION_ERROR', 'category is required.', 400);
+  if (!Number.isFinite(amount) || amount <= 0) throw apiError_('VALIDATION_ERROR', 'amount must be a positive number.', 400);
+  if (fee !== '' && (!Number.isFinite(fee) || fee < 0)) throw apiError_('VALIDATION_ERROR', 'fee must be zero or a positive number.', 400);
+  if (!paymentMethod) throw apiError_('VALIDATION_ERROR', 'paymentMethod is required.', 400);
 
   return {
-    id: input.id ? String(input.id) : '',
     date,
-    amount,
-    currency: String(input.currency || CONFIG.DEFAULT_CURRENCY).trim(),
     category,
-    note: String(input.note || '').trim(),
-    paymentMethod: String(input.paymentMethod || '').trim(),
-    vendor: String(input.vendor || '').trim()
+    amount,
+    fee,
+    paymentMethod,
+    bankCardName: String(input.bankCardName || '').trim(),
+    note: String(input.note || '').trim()
   };
 }
 
@@ -159,11 +154,12 @@ function buildMonthlySummary_(month) {
   const totalsByCategory = {};
   let total = 0;
   let highExpenseCount = 0;
+  const threshold = getHighExpenseThreshold_();
 
   expenses.forEach(function(expense) {
     total += expense.amount;
     totalsByCategory[expense.category] = (totalsByCategory[expense.category] || 0) + expense.amount;
-    if (expense.isHighExpense) highExpenseCount += 1;
+    if (expense.amount >= threshold) highExpenseCount += 1;
   });
 
   const categories = Object.keys(totalsByCategory)
@@ -183,72 +179,82 @@ function buildMonthlySummary_(month) {
     currency: CONFIG.DEFAULT_CURRENCY,
     count: expenses.length,
     highExpenseCount,
-    highExpenseThreshold: getHighExpenseThreshold_(),
+    highExpenseThreshold: threshold,
     categories,
     updatedAt: nowIso_()
   };
 }
 
-function runMonthlyAutomation_(month) {
-  const summary = buildMonthlySummary_(month);
-  writeSummarySheet_(summary);
-  refreshHighExpenseFlags_();
-  return summary;
-}
-
-function createMonthEndTrigger() {
-  deleteExistingTriggers_('monthEndAutomation');
-  ScriptApp.newTrigger('monthEndAutomation')
-    .timeBased()
-    .onMonthDay(1)
-    .atHour(1)
-    .create();
-}
-
-function monthEndAutomation() {
-  runMonthlyAutomation_(previousMonth_());
-}
-
-function writeSummarySheet_(summary) {
+function generateMonthlyReport(month) {
+  ensureWorkbook_();
+  const targetMonth = normalizeMonth_(month || currentMonth_());
+  const summary = buildMonthlySummary_(targetMonth);
   const spreadsheet = SpreadsheetApp.getActive();
-  const sheetName = CONFIG.SUMMARY_PREFIX + summary.month;
-  let sheet = spreadsheet.getSheetByName(sheetName);
-  if (!sheet) sheet = spreadsheet.insertSheet(sheetName);
-  sheet.clear();
+  const reportSheetName = targetMonth + ' 月報表';
+  let reportSheet = spreadsheet.getSheetByName(reportSheetName);
+
+  if (reportSheet) {
+    reportSheet.clear();
+    reportSheet.getCharts().forEach(function(chart) {
+      reportSheet.removeChart(chart);
+    });
+  } else {
+    reportSheet = spreadsheet.insertSheet(reportSheetName);
+  }
 
   const rows = [
-    ['month', summary.month],
-    ['total', summary.total],
-    ['currency', summary.currency],
-    ['expenseCount', summary.count],
-    ['highExpenseThreshold', summary.highExpenseThreshold],
-    ['highExpenseCount', summary.highExpenseCount],
-    ['updatedAt', summary.updatedAt],
+    ['月份', targetMonth],
+    ['總支出', summary.total],
+    ['紀錄筆數', summary.count],
+    ['產生時間', summary.updatedAt],
     [],
-    ['category', 'total', 'percentage']
+    ['類別', '金額', '占比']
   ];
 
   summary.categories.forEach(function(item) {
-    rows.push([item.category, item.total, item.percentage]);
+    rows.push([item.category, item.total, item.percentage / 100]);
   });
 
-  sheet.getRange(1, 1, rows.length, 3).setValues(rows);
-  sheet.autoResizeColumns(1, 3);
+  reportSheet.getRange(1, 1, rows.length, 3).setValues(rows);
+  reportSheet.getRange(7, 2, Math.max(summary.categories.length, 1), 1).setNumberFormat('"NT$"#,##0');
+  reportSheet.getRange(7, 3, Math.max(summary.categories.length, 1), 1).setNumberFormat('0.00%');
+
+  if (summary.categories.length > 0) {
+    const chartRange = reportSheet.getRange(6, 1, summary.categories.length + 1, 2);
+    const chart = reportSheet.newChart()
+      .setChartType(Charts.ChartType.PIE)
+      .addRange(chartRange)
+      .setPosition(2, 5, 0, 0)
+      .setOption('title', targetMonth + ' 消費類別占比')
+      .setOption('pieHole', 0.35)
+      .build();
+    reportSheet.insertChart(chart);
+  }
+
+  reportSheet.autoResizeColumns(1, 3);
+
+  return {
+    month: targetMonth,
+    reportSheetName,
+    total: summary.total,
+    categories: summary.categories,
+    updatedAt: summary.updatedAt
+  };
 }
 
-function refreshHighExpenseFlags_() {
-  const sheet = SpreadsheetApp.getActive().getSheetByName(CONFIG.EXPENSE_SHEET);
-  const lastRow = sheet.getLastRow();
-  if (lastRow <= 1) return;
+function createMonthlyReportTrigger() {
+  deleteExistingTriggers_('monthEndReportAutomation');
+  ScriptApp.newTrigger('monthEndReportAutomation')
+    .timeBased()
+    .everyDays(1)
+    .atHour(23)
+    .create();
+}
 
-  const amountColumn = EXPENSE_HEADERS.indexOf('amount') + 1;
-  const highColumn = EXPENSE_HEADERS.indexOf('isHighExpense') + 1;
-  const threshold = getHighExpenseThreshold_();
-  const amounts = sheet.getRange(2, amountColumn, lastRow - 1, 1).getValues();
-  const flags = amounts.map(function(row) {
-    return [Number(row[0]) >= threshold];
-  });
-  sheet.getRange(2, highColumn, flags.length, 1).setValues(flags);
+function monthEndReportAutomation() {
+  if (isLastDayOfMonth_(new Date())) {
+    generateMonthlyReport(currentMonth_());
+  }
 }
 
 function ensureWorkbook_() {
@@ -287,13 +293,19 @@ function getExpenseRows_() {
 }
 
 function rowToExpense_(row) {
-  const expense = {};
-  EXPENSE_HEADERS.forEach(function(header, index) {
-    expense[header] = row[index];
-  });
-  expense.amount = Number(expense.amount || 0);
-  expense.isHighExpense = expense.isHighExpense === true || expense.isHighExpense === 'TRUE';
-  return expense;
+  const amount = Number(row[3] || 0);
+  return {
+    date: normalizeSheetDate_(row[0]),
+    month: String(row[1] || ''),
+    category: String(row[2] || ''),
+    amount,
+    fee: row[4] === '' ? '' : Number(row[4] || 0),
+    paymentMethod: String(row[5] || ''),
+    bankCardName: String(row[6] || ''),
+    note: String(row[7] || ''),
+    createdAt: String(row[8] || ''),
+    isHighExpense: amount >= getHighExpenseThreshold_()
+  };
 }
 
 function getHighExpenseThreshold_() {
@@ -334,6 +346,13 @@ function normalizeDate_(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : '';
 }
 
+function normalizeSheetDate_(value) {
+  if (Object.prototype.toString.call(value) === '[object Date]') {
+    return Utilities.formatDate(value, CONFIG.TIMEZONE, 'yyyy-MM-dd');
+  }
+  return String(value || '');
+}
+
 function normalizeMonth_(value) {
   const text = String(value || '').trim();
   if (!/^\d{4}-\d{2}$/.test(text)) {
@@ -354,12 +373,6 @@ function currentMonth_() {
   return Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyy-MM');
 }
 
-function previousMonth_() {
-  const date = new Date();
-  date.setMonth(date.getMonth() - 1);
-  return Utilities.formatDate(date, CONFIG.TIMEZONE, 'yyyy-MM');
-}
-
 function nowIso_() {
   return Utilities.formatDate(new Date(), CONFIG.TIMEZONE, "yyyy-MM-dd'T'HH:mm:ssXXX");
 }
@@ -374,9 +387,15 @@ function roundPercent_(value) {
 
 function responseMeta_() {
   return {
-    version: '1.0.0',
+    version: '1.1.0',
     generatedAt: nowIso_()
   };
+}
+
+function isLastDayOfMonth_(date) {
+  const tomorrow = new Date(date.getTime());
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  return tomorrow.getMonth() !== date.getMonth();
 }
 
 function deleteExistingTriggers_(handlerName) {

@@ -41,13 +41,13 @@ paths:
             schema:
               oneOf:
                 - $ref: "#/components/schemas/AddExpenseRequest"
-                - $ref: "#/components/schemas/RunMonthlyAutomationRequest"
+                - $ref: "#/components/schemas/GenerateMonthlyReportRequest"
                 - $ref: "#/components/schemas/SetupRequest"
           application/json:
             schema:
               oneOf:
                 - $ref: "#/components/schemas/AddExpenseRequest"
-                - $ref: "#/components/schemas/RunMonthlyAutomationRequest"
+                - $ref: "#/components/schemas/GenerateMonthlyReportRequest"
                 - $ref: "#/components/schemas/SetupRequest"
       responses:
         "200":
@@ -95,13 +95,13 @@ components:
           const: addExpense
         expense:
           $ref: "#/components/schemas/ExpenseInput"
-    RunMonthlyAutomationRequest:
+    GenerateMonthlyReportRequest:
       type: object
       required: [action, month]
       properties:
         action:
           type: string
-          const: runMonthlyAutomation
+          const: generateMonthlyReport
         month:
           type: string
           pattern: "^\\d{4}-\\d{2}$"
@@ -114,41 +114,41 @@ components:
           const: setup
     ExpenseInput:
       type: object
-      required: [date, amount, category]
+      required: [date, category, amount, paymentMethod]
       properties:
         date:
           type: string
           format: date
+        category:
+          type: string
         amount:
           type: number
           exclusiveMinimum: 0
-        currency:
-          type: string
-          default: TWD
-        category:
-          type: string
-        note:
-          type: string
+        fee:
+          oneOf:
+            - type: number
+              minimum: 0
+            - type: string
+              const: ""
         paymentMethod:
           type: string
-        vendor:
+          enum: [現金, 轉帳, 信用卡, 行動支付, 其他]
+        bankCardName:
+          type: string
+          description: Transfer bank or credit card name. Empty for cash or other methods.
+        note:
           type: string
     Expense:
       allOf:
         - $ref: "#/components/schemas/ExpenseInput"
         - type: object
-          required: [id, month, isHighExpense, createdAt, updatedAt]
+          required: [month, createdAt]
           properties:
-            id:
-              type: string
             month:
               type: string
             isHighExpense:
               type: boolean
             createdAt:
-              type: string
-              format: date-time
-            updatedAt:
               type: string
               format: date-time
     MonthlySummary:

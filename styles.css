@@ -228,6 +228,10 @@ select:focus {
   grid-column: 1 / -1;
 }
 
+.conditional-field.is-hidden {
+  display: none;
+}
+
 .primary-action {
   width: 100%;
   min-height: 48px;
@@ -249,7 +253,7 @@ select:focus {
 
 table {
   width: 100%;
-  min-width: 520px;
+  min-width: 760px;
   border-collapse: collapse;
 }
 

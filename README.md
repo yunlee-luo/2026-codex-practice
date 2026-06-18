@@ -26,7 +26,7 @@ The active rules allow:
 - `firestore.rules`: Firestore security rules
 - `AGENTS.md`: Codex project operating notes
 - `.gitignore`: local files and secret exclusions
-- `docs/expense-automation.md`: Google Sheets monthly expense automation setup guide
+- `docs/expense-automation.md`: Google Sheets monthly expense automation setup guide, including dynamic payment fields and monthly pie-chart reports
 - `apps-script/`: Google Apps Script backend for expense tracking
 - `index.html`, `styles.css`, `app.js`: static expense dashboard for GitHub Pages from the repository root
 - `skill/automate-monthly-expenses/`: reusable Skill package and OpenAPI contract

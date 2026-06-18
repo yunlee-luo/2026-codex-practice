@@ -10,15 +10,15 @@
   "inputs": {
     "expense": {
       "type": "object",
-      "required": ["date", "amount", "category"],
+      "required": ["date", "category", "amount", "paymentMethod"],
       "properties": {
         "date": { "type": "string", "format": "date" },
-        "amount": { "type": "number", "exclusiveMinimum": 0 },
-        "currency": { "type": "string", "default": "TWD" },
         "category": { "type": "string" },
-        "note": { "type": "string" },
+        "amount": { "type": "number", "exclusiveMinimum": 0 },
+        "fee": { "type": ["number", "string"], "description": "Number for transfer fee, or empty string when not applicable." },
         "paymentMethod": { "type": "string" },
-        "vendor": { "type": "string" }
+        "bankCardName": { "type": "string" },
+        "note": { "type": "string" }
       }
     },
     "month": {
@@ -36,6 +36,16 @@
         "count": { "type": "integer" },
         "highExpenseCount": { "type": "integer" },
         "categories": { "type": "array" }
+      }
+    },
+    "monthlyReport": {
+      "type": "object",
+      "properties": {
+        "month": { "type": "string" },
+        "reportSheetName": { "type": "string" },
+        "total": { "type": "number" },
+        "categories": { "type": "array" },
+        "updatedAt": { "type": "string" }
       }
     }
   }
