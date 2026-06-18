@@ -131,6 +131,10 @@ select:focus {
   gap: 16px;
 }
 
+.workspace-grid > * {
+  min-width: 0;
+}
+
 .metric-panel,
 .ratio-panel,
 .expense-form,
@@ -139,6 +143,7 @@ select:focus {
   border: 1px solid var(--line);
   border-radius: 8px;
   box-shadow: var(--shadow);
+  min-width: 0;
   padding: 20px;
 }
 
@@ -256,16 +261,17 @@ select:focus {
 
 .row-actions {
   display: flex;
-  gap: 6px;
+  gap: 4px;
+  justify-content: center;
   white-space: nowrap;
 }
 
 .row-action {
   display: inline-grid;
   place-items: center;
-  width: 34px;
-  height: 34px;
-  min-height: 34px;
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface-soft);
@@ -284,11 +290,14 @@ select:focus {
 }
 
 .table-wrap {
-  overflow-x: visible;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 table {
   width: 100%;
+  max-width: 100%;
   table-layout: fixed;
   border-collapse: collapse;
 }
@@ -296,7 +305,7 @@ table {
 th,
 td {
   border-bottom: 1px solid var(--line);
-  padding: 12px 10px;
+  padding: 10px 6px;
   text-align: left;
   vertical-align: top;
   overflow-wrap: anywhere;
@@ -306,8 +315,12 @@ td {
 
 th {
   color: var(--muted);
-  font-size: 0.86rem;
+  font-size: 0.82rem;
   font-weight: 700;
+}
+
+td {
+  font-size: 0.9rem;
 }
 
 td.amount {
@@ -317,32 +330,37 @@ td.amount {
 
 th:nth-child(1),
 td:nth-child(1) {
-  width: 88px;
+  width: 13%;
 }
 
 th:nth-child(2),
 td:nth-child(2) {
-  width: 96px;
+  width: 13%;
 }
 
 th:nth-child(3),
 td:nth-child(3) {
-  width: 88px;
+  width: 12%;
 }
 
 th:nth-child(4),
 td:nth-child(4) {
-  width: 82px;
+  width: 12%;
 }
 
 th:nth-child(5),
 td:nth-child(5) {
-  width: 112px;
+  width: 14%;
+}
+
+th:nth-child(6),
+td:nth-child(6) {
+  width: 24%;
 }
 
 th:nth-child(7),
 td:nth-child(7) {
-  width: 82px;
+  width: 12%;
 }
 
 .empty-state {
