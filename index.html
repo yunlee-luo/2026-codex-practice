@@ -104,7 +104,10 @@
             </label>
           </div>
 
-          <button class="primary-action" type="submit">加入支出</button>
+          <div class="form-actions">
+            <button id="submitButton" class="primary-action" type="submit">加入支出</button>
+            <button id="cancelEditButton" class="ghost-button is-hidden" type="button">取消編輯</button>
+          </div>
         </form>
 
         <section class="recent-panel" aria-label="本月支出紀錄">
@@ -126,11 +129,12 @@
                   <th>付款方式</th>
                   <th>銀行/卡片</th>
                   <th>備註</th>
+                  <th>操作</th>
                 </tr>
               </thead>
               <tbody id="expenseRows">
                 <tr>
-                  <td colspan="6" class="empty-state">資料載入中</td>
+                  <td colspan="7" class="empty-state">資料載入中</td>
                 </tr>
               </tbody>
             </table>

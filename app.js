@@ -21,7 +21,8 @@ const state = {
   month: '',
   summary: null,
   expenses: [],
-  loading: false
+  loading: false,
+  editingRowId: null
 };
 
 const money = new Intl.NumberFormat('zh-TW', {
@@ -46,7 +47,9 @@ const elements = {
   paymentMethodSelect: document.querySelector('#paymentMethodSelect'),
   transferFeeField: document.querySelector('#transferFeeField'),
   transferBankField: document.querySelector('#transferBankField'),
-  cardNameField: document.querySelector('#cardNameField')
+  cardNameField: document.querySelector('#cardNameField'),
+  submitButton: document.querySelector('#submitButton'),
+  cancelEditButton: document.querySelector('#cancelEditButton')
 };
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -66,6 +69,8 @@ document.addEventListener('DOMContentLoaded', () => {
   elements.paymentMethodSelect.addEventListener('change', updatePaymentFields);
   elements.refreshButton.addEventListener('click', loadDashboard);
   elements.expenseForm.addEventListener('submit', addExpense);
+  elements.cancelEditButton.addEventListener('click', resetFormMode);
+  elements.expenseRows.addEventListener('click', handleRowAction);
 
   loadDashboard();
 });
@@ -105,6 +110,60 @@ function toggleField(field, shouldShow) {
   field.classList.toggle('is-hidden', !shouldShow);
 }
 
+function getExpenseFromForm() {
+  const form = new FormData(elements.expenseForm);
+  const paymentMethod = form.get('paymentMethod');
+  const bankCardName = paymentMethod === '轉帳'
+    ? form.get('transferBank')
+    : paymentMethod === '信用卡'
+      ? form.get('cardName')
+      : '';
+
+  return {
+    date: form.get('date'),
+    category: form.get('category'),
+    amount: Number(form.get('amount')),
+    fee: form.get('fee') ? Number(form.get('fee')) : '',
+    paymentMethod,
+    bankCardName,
+    note: form.get('note') || ''
+  };
+}
+
+function enterEditMode(expense) {
+  state.editingRowId = Number(expense.rowId);
+  elements.expenseForm.elements.date.value = expense.date || '';
+  elements.expenseForm.elements.category.value = expense.category || '';
+  elements.expenseForm.elements.amount.value = expense.amount || '';
+  elements.expenseForm.elements.paymentMethod.value = expense.paymentMethod || '';
+  elements.expenseForm.elements.note.value = expense.note || '';
+
+  updatePaymentFields();
+
+  if (expense.paymentMethod === '轉帳') {
+    elements.expenseForm.elements.fee.value = expense.fee || '';
+    elements.expenseForm.elements.transferBank.value = expense.bankCardName || '';
+  }
+
+  if (expense.paymentMethod === '信用卡') {
+    elements.expenseForm.elements.cardName.value = expense.bankCardName || '';
+  }
+
+  elements.submitButton.textContent = '儲存修改';
+  elements.cancelEditButton.classList.remove('is-hidden');
+  setStatus(`正在編輯第 ${expense.rowId} 列`);
+  elements.expenseForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function resetFormMode() {
+  state.editingRowId = null;
+  elements.expenseForm.reset();
+  elements.expenseForm.elements.date.value = formatDate(new Date());
+  updatePaymentFields();
+  elements.submitButton.textContent = '加入支出';
+  elements.cancelEditButton.classList.add('is-hidden');
+}
+
 async function loadDashboard() {
   try {
     assertConfigured();
@@ -131,30 +190,19 @@ async function addExpense(event) {
 
   try {
     assertConfigured();
-    const form = new FormData(elements.expenseForm);
-    const paymentMethod = form.get('paymentMethod');
-    const bankCardName = paymentMethod === '轉帳'
-      ? form.get('transferBank')
-      : paymentMethod === '信用卡'
-        ? form.get('cardName')
-        : '';
-
-    const expenseDate = form.get('date');
+    const expense = getExpenseFromForm();
+    const wasEditing = Boolean(state.editingRowId);
     const payload = {
-      action: 'addExpense',
-      expense: {
-        date: expenseDate,
-        category: form.get('category'),
-        amount: Number(form.get('amount')),
-        fee: form.get('fee') ? Number(form.get('fee')) : '',
-        paymentMethod,
-        bankCardName,
-        note: form.get('note') || ''
-      }
+      action: wasEditing ? 'updateExpense' : 'addExpense',
+      expense
     };
 
-    console.log('[ExpenseApp] POST addExpense payload:', payload);
-    setStatus('新增中...');
+    if (wasEditing) {
+      payload.rowId = state.editingRowId;
+    }
+
+    console.log('[ExpenseApp] POST save expense payload:', payload);
+    setStatus(wasEditing ? '儲存修改中...' : '新增中...');
 
     const postResponse = await requestApi('', {
       method: 'POST',
@@ -162,20 +210,69 @@ async function addExpense(event) {
       body: JSON.stringify(payload)
     });
 
-    console.log('[ExpenseApp] POST addExpense success response:', postResponse);
+    console.log('[ExpenseApp] POST save expense success response:', postResponse);
 
-    state.month = String(expenseDate).slice(0, 7);
+    state.month = String(expense.date).slice(0, 7);
     elements.monthInput.value = state.month;
-    elements.expenseForm.reset();
-    elements.expenseForm.elements.date.value = formatDate(new Date());
-    updatePaymentFields();
+    resetFormMode();
 
     setStatus('已寫入，正在更新畫面...');
-    await refreshUntilExpenseVisible(postResponse.data?.expense || payload.expense);
-    setStatus('已新增並更新畫面');
+    await refreshUntilExpenseVisible(postResponse.data?.expense || expense);
+    setStatus(wasEditing ? '已儲存並更新畫面' : '已新增並更新畫面');
   } catch (error) {
     console.error('[ExpenseApp] addExpense failed:', error);
-    showError(error.message || '新增失敗');
+    showError(error.message || '儲存失敗');
+  }
+}
+
+async function handleRowAction(event) {
+  const button = event.target.closest('button[data-action]');
+  if (!button) return;
+
+  const rowId = Number(button.dataset.rowId);
+  const expense = state.expenses.find(item => Number(item.rowId) === rowId);
+  if (!expense) {
+    showError('找不到這筆資料，請重新整理後再試。');
+    return;
+  }
+
+  if (button.dataset.action === 'edit') {
+    enterEditMode(expense);
+    return;
+  }
+
+  if (button.dataset.action === 'delete') {
+    await deleteExpense(expense);
+  }
+}
+
+async function deleteExpense(expense) {
+  const confirmed = window.confirm(`確定要刪除 ${expense.date} 的 ${formatCategory(expense.category)} ${money.format(expense.amount || 0)} 嗎？`);
+  if (!confirmed) return;
+
+  try {
+    const payload = {
+      action: 'deleteExpense',
+      rowId: expense.rowId
+    };
+    console.log('[ExpenseApp] POST deleteExpense payload:', payload);
+    setStatus('刪除中...');
+
+    const response = await requestApi('', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload)
+    });
+    console.log('[ExpenseApp] POST deleteExpense success response:', response);
+
+    if (state.editingRowId === expense.rowId) {
+      resetFormMode();
+    }
+    await loadDashboard();
+    setStatus('已刪除並更新畫面');
+  } catch (error) {
+    console.error('[ExpenseApp] deleteExpense failed:', error);
+    showError(error.message || '刪除失敗');
   }
 }
 
@@ -219,7 +316,8 @@ async function fetchDashboardData(month) {
   console.log('[ExpenseApp] GET listExpenses full JSON data:', expensesResponse);
 
   const expenses = normalizeExpensesResponse(expensesResponse);
-  const summary = buildClientSummary(month, expenses, expensesResponse.meta?.generatedAt);
+  const highExpenseThreshold = Number(expensesResponse.data?.highExpenseThreshold || 0);
+  const summary = buildClientSummary(month, expenses, expensesResponse.meta?.generatedAt, highExpenseThreshold);
 
   console.log('[ExpenseApp] Parsed expenses array:', expenses);
   console.log('[ExpenseApp] Client-side summary:', summary);
@@ -238,17 +336,17 @@ function normalizeExpensesResponse(responseJson) {
   return [];
 }
 
-function buildClientSummary(month, expenses, generatedAt) {
+function buildClientSummary(month, expenses, generatedAt, highExpenseThreshold) {
   const totalsByCategory = {};
   let total = 0;
   let highExpenseCount = 0;
-  const highExpenseThreshold = 30000;
+  const threshold = Number(highExpenseThreshold || 0);
 
   expenses.forEach(expense => {
     const amount = Number(expense.amount || 0);
     total += amount;
     totalsByCategory[expense.category] = (totalsByCategory[expense.category] || 0) + amount;
-    if (amount >= highExpenseThreshold) highExpenseCount += 1;
+    if (expense.isHighExpense === true || (threshold > 0 && amount >= threshold)) highExpenseCount += 1;
   });
 
   const categories = Object.entries(totalsByCategory)
@@ -265,7 +363,7 @@ function buildClientSummary(month, expenses, generatedAt) {
     currency: 'TWD',
     count: expenses.length,
     highExpenseCount,
-    highExpenseThreshold,
+    highExpenseThreshold: threshold,
     categories,
     updatedAt: generatedAt || new Date().toISOString()
   };
@@ -355,7 +453,7 @@ function renderRows(expenses) {
   elements.expenseRows.innerHTML = '';
 
   if (!expenses.length) {
-    elements.expenseRows.innerHTML = '<tr><td colspan="6" class="empty-state">尚無紀錄</td></tr>';
+    elements.expenseRows.innerHTML = '<tr><td colspan="7" class="empty-state">尚無紀錄</td></tr>';
     return;
   }
 
@@ -370,6 +468,12 @@ function renderRows(expenses) {
         <td>${escapeHtml(expense.paymentMethod || '')}</td>
         <td>${escapeHtml(expense.bankCardName || '')}</td>
         <td>${escapeHtml(expense.note || '')}</td>
+        <td>
+          <div class="row-actions">
+            <button class="row-action" type="button" data-action="edit" data-row-id="${escapeHtml(expense.rowId)}">編輯</button>
+            <button class="row-action danger" type="button" data-action="delete" data-row-id="${escapeHtml(expense.rowId)}">刪除</button>
+          </div>
+        </td>
       </tr>
     `)
     .join('');

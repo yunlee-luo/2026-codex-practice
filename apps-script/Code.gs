@@ -50,7 +50,7 @@ function doGet(e) {
     if (action === 'listExpenses') {
       return jsonResponse_({
         ok: true,
-        data: { month, expenses },
+        data: { month, expenses, highExpenseThreshold: getHighExpenseThreshold_() },
         meta: responseMeta_()
       });
     }
@@ -98,6 +98,26 @@ function doPost(e) {
       });
     }
 
+    if (action === 'deleteExpense') {
+      const rowId = normalizeRowId_(payload.rowId);
+      deleteExpense_(rowId);
+      return jsonResponse_({
+        ok: true,
+        data: { rowId },
+        meta: responseMeta_()
+      });
+    }
+
+    if (action === 'updateExpense') {
+      const rowId = normalizeRowId_(payload.rowId);
+      const expense = updateExpense_(rowId, payload.expense || {});
+      return jsonResponse_({
+        ok: true,
+        data: { expense },
+        meta: responseMeta_()
+      });
+    }
+
     if (action === 'setup') {
       ensureWorkbook_();
       return jsonResponse_({
@@ -136,7 +156,42 @@ function addExpense_(input) {
   sheet.appendRow(row);
   SpreadsheetApp.flush();
 
-  return rowToExpense_(row);
+  return rowToExpense_(row, sheet.getLastRow());
+}
+
+function deleteExpense_(rowId) {
+  const sheet = SpreadsheetApp.getActive().getSheetByName(CONFIG.EXPENSE_SHEET);
+  if (rowId < 2 || rowId > sheet.getLastRow()) {
+    throw apiError_('VALIDATION_ERROR', 'rowId is out of range.');
+  }
+  sheet.deleteRow(rowId);
+  SpreadsheetApp.flush();
+}
+
+function updateExpense_(rowId, input) {
+  const sheet = SpreadsheetApp.getActive().getSheetByName(CONFIG.EXPENSE_SHEET);
+  if (rowId < 2 || rowId > sheet.getLastRow()) {
+    throw apiError_('VALIDATION_ERROR', 'rowId is out of range.');
+  }
+
+  const expense = normalizeExpense_(input);
+  const existingCreatedAt = normalizeSheetDateTime_(sheet.getRange(rowId, 9).getValue()) || nowIso_();
+  const row = [
+    expense.date,
+    "'" + monthFromDate_(expense.date),
+    expense.category,
+    expense.amount,
+    expense.fee,
+    expense.paymentMethod,
+    expense.bankCardName,
+    expense.note,
+    existingCreatedAt
+  ];
+
+  sheet.getRange(rowId, 1, 1, EXPENSE_HEADERS.length).setValues([row]);
+  SpreadsheetApp.flush();
+
+  return rowToExpense_(row, rowId);
 }
 
 function normalizeExpense_(input) {
@@ -176,12 +231,17 @@ function readAllExpenses_() {
   const rows = range.getValues();
 
   return rows
-    .filter(function(row) {
-      return row.some(function(cell) {
+    .map(function(row, index) {
+      return { row, rowId: index + 2 };
+    })
+    .filter(function(item) {
+      return item.row.some(function(cell) {
         return cell !== '' && cell !== null;
       });
     })
-    .map(rowToExpense_);
+    .map(function(item) {
+      return rowToExpense_(item.row, item.rowId);
+    });
 }
 
 function filterExpensesByMonth_(expenses, month) {
@@ -232,13 +292,14 @@ function buildMonthlySummaryFromExpenses_(month, expenses) {
   };
 }
 
-function rowToExpense_(row) {
+function rowToExpense_(row, rowId) {
   const date = normalizeSheetDate_(row[0]);
   const month = normalizeSheetMonth_(row[1], date);
   const amount = Number(row[3] || 0);
   const fee = row[4] === '' || row[4] === null ? '' : Number(row[4] || 0);
 
   return {
+    rowId,
     date,
     month,
     category: String(row[2] || ''),
@@ -374,6 +435,14 @@ function parsePostBody_(e) {
   } catch (err) {
     throw apiError_('INVALID_JSON', 'Request body must be valid JSON.');
   }
+}
+
+function normalizeRowId_(value) {
+  const rowId = Number(value);
+  if (!Number.isInteger(rowId) || rowId < 2) {
+    throw apiError_('VALIDATION_ERROR', 'rowId must be a valid sheet row number.');
+  }
+  return rowId;
 }
 
 function jsonResponse_(data) {

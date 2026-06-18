@@ -232,10 +232,16 @@ select:focus {
   display: none;
 }
 
+.form-actions {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  margin-top: 18px;
+}
+
 .primary-action {
   width: 100%;
   min-height: 48px;
-  margin-top: 18px;
   border: 0;
   border-radius: 8px;
   background: var(--accent);
@@ -245,6 +251,29 @@ select:focus {
 
 .primary-action:hover {
   background: var(--accent-dark);
+}
+
+.is-hidden {
+  display: none !important;
+}
+
+.row-actions {
+  display: flex;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.row-action {
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  color: var(--ink);
+  padding: 6px 10px;
+}
+
+.row-action.danger {
+  color: var(--warning);
 }
 
 .table-wrap {
