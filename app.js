@@ -209,25 +209,65 @@ async function refreshUntilExpenseVisible(expectedExpense) {
 
 async function fetchDashboardData(month) {
   const encodedMonth = encodeURIComponent(month);
-  const summaryPath = addCacheBust(`?action=monthlySummary&month=${encodedMonth}`);
   const expensesPath = addCacheBust(`?action=listExpenses&month=${encodedMonth}`);
 
   console.log('[ExpenseApp] GET dashboard request paths:', {
-    summaryPath,
     expensesPath
   });
 
-  const [summaryResponse, expensesResponse] = await Promise.all([
-    requestApi(summaryPath),
-    requestApi(expensesPath)
-  ]);
+  const expensesResponse = await requestApi(expensesPath);
+  console.log('[ExpenseApp] GET listExpenses full JSON data:', expensesResponse);
 
-  console.log('[ExpenseApp] GET monthlySummary JSON:', summaryResponse);
-  console.log('[ExpenseApp] GET listExpenses JSON:', expensesResponse);
+  const expenses = normalizeExpensesResponse(expensesResponse);
+  const summary = buildClientSummary(month, expenses, expensesResponse.meta?.generatedAt);
+
+  console.log('[ExpenseApp] Parsed expenses array:', expenses);
+  console.log('[ExpenseApp] Client-side summary:', summary);
 
   return {
-    summary: summaryResponse.data || emptySummary(),
-    expenses: expensesResponse.data?.expenses || []
+    summary,
+    expenses
+  };
+}
+
+function normalizeExpensesResponse(responseJson) {
+  if (Array.isArray(responseJson)) return responseJson;
+  if (Array.isArray(responseJson.data)) return responseJson.data;
+  if (Array.isArray(responseJson.data?.expenses)) return responseJson.data.expenses;
+  console.warn('[ExpenseApp] Unknown expenses response shape:', responseJson);
+  return [];
+}
+
+function buildClientSummary(month, expenses, generatedAt) {
+  const totalsByCategory = {};
+  let total = 0;
+  let highExpenseCount = 0;
+  const highExpenseThreshold = 30000;
+
+  expenses.forEach(expense => {
+    const amount = Number(expense.amount || 0);
+    total += amount;
+    totalsByCategory[expense.category] = (totalsByCategory[expense.category] || 0) + amount;
+    if (amount >= highExpenseThreshold) highExpenseCount += 1;
+  });
+
+  const categories = Object.entries(totalsByCategory)
+    .sort(([a], [b]) => a.localeCompare(b, 'zh-Hant'))
+    .map(([category, categoryTotal]) => ({
+      category,
+      total: categoryTotal,
+      percentage: total ? Math.round((categoryTotal / total) * 10000) / 100 : 0
+    }));
+
+  return {
+    month,
+    total,
+    currency: 'TWD',
+    count: expenses.length,
+    highExpenseCount,
+    highExpenseThreshold,
+    categories,
+    updatedAt: generatedAt || new Date().toISOString()
   };
 }
 
@@ -250,6 +290,7 @@ async function requestApi(path, options = {}) {
   });
 
   const json = await response.json();
+  console.log('[ExpenseApp] Raw JSON data:', json);
   console.log('[ExpenseApp] Fetch response:', {
     url,
     status: response.status,
@@ -257,7 +298,7 @@ async function requestApi(path, options = {}) {
     json
   });
 
-  if (!response.ok || !json.ok) {
+  if (!response.ok || json.ok === false) {
     const message = json.error?.message || `API 錯誤：${response.status}`;
     throw new Error(message);
   }
@@ -277,7 +318,7 @@ function renderDashboard() {
   elements.expenseCount.textContent = `${summary.count || 0} 筆紀錄`;
   elements.highExpenseCount.textContent = String(summary.highExpenseCount || 0);
   elements.thresholdText.textContent = `門檻 ${money.format(summary.highExpenseThreshold || 0)}`;
-  elements.lastUpdated.textContent = summary.updatedAt ? `更新 ${summary.updatedAt}` : '';
+  elements.lastUpdated.textContent = summary.updatedAt ? `更新 ${formatTaipeiDateTime(summary.updatedAt)}` : '';
 
   renderCategories(summary.categories || []);
   renderRows(state.expenses || []);
@@ -381,6 +422,24 @@ function formatDate(date) {
 
 function formatMonth(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function formatTaipeiDateTime(value) {
+  const date = value ? new Date(value) : new Date();
+  if (Number.isNaN(date.getTime())) return String(value || '');
+
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Taipei',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).formatToParts(date);
+
+  const map = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return `${map.year}-${map.month}-${map.day} ${map.hour}:${map.minute}`;
 }
 
 function delay(ms) {
