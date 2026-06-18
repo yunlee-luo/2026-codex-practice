@@ -1,4 +1,4 @@
-const API_URL = 'PASTE_YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL_HERE';
+const API_URL = 'https://script.google.com/macros/s/AKfycbxq6nVaVZ74Loi4crbCkO5j8jg_gJYWfvYgI6ilJHxXGA_v7RP8fcZF-2lVEcp9GUzKuw/exec';
 
 const state = {
   month: '',
