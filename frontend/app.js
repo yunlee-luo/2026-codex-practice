@@ -3,7 +3,8 @@ const API_URL = 'https://script.google.com/macros/s/AKfycbxq6nVaVZ74Loi4crbCkO5j
 const state = {
   month: '',
   summary: null,
-  expenses: []
+  expenses: [],
+  loading: false
 };
 
 const money = new Intl.NumberFormat('zh-TW', {
@@ -28,14 +29,15 @@ const elements = {
 
 document.addEventListener('DOMContentLoaded', () => {
   const today = new Date();
-  state.month = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+  state.month = formatMonth(today);
   elements.monthInput.value = state.month;
-  elements.expenseForm.elements.date.value = today.toISOString().slice(0, 10);
+  elements.expenseForm.elements.date.value = formatDate(today);
 
   elements.monthInput.addEventListener('change', () => {
     state.month = elements.monthInput.value;
     loadDashboard();
   });
+
   elements.refreshButton.addEventListener('click', loadDashboard);
   elements.expenseForm.addEventListener('submit', addExpense);
 
@@ -43,56 +45,74 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 async function loadDashboard() {
-  assertConfigured();
-  setStatus('資料載入中...');
-  const [summaryResponse, expensesResponse] = await Promise.all([
-    requestApi(`?action=monthlySummary&month=${encodeURIComponent(state.month)}`),
-    requestApi(`?action=listExpenses&month=${encodeURIComponent(state.month)}`)
-  ]);
+  try {
+    assertConfigured();
+    state.loading = true;
+    setStatus('資料載入中...');
+    elements.refreshButton.disabled = true;
 
-  state.summary = summaryResponse.data;
-  state.expenses = expensesResponse.data.expenses || [];
-  renderDashboard();
-  setStatus('');
+    const month = encodeURIComponent(state.month);
+    const [summaryResponse, expensesResponse] = await Promise.all([
+      requestApi(`?action=monthlySummary&month=${month}`),
+      requestApi(`?action=listExpenses&month=${month}`)
+    ]);
+
+    state.summary = summaryResponse.data;
+    state.expenses = expensesResponse.data.expenses || [];
+    renderDashboard();
+    setStatus('');
+  } catch (error) {
+    showError(error.message || '資料載入失敗');
+  } finally {
+    state.loading = false;
+    elements.refreshButton.disabled = false;
+  }
 }
 
 async function addExpense(event) {
   event.preventDefault();
-  assertConfigured();
 
-  const form = new FormData(elements.expenseForm);
-  const payload = {
-    action: 'addExpense',
-    expense: {
-      date: form.get('date'),
-      amount: Number(form.get('amount')),
-      category: form.get('category'),
-      paymentMethod: form.get('paymentMethod'),
-      vendor: form.get('vendor'),
-      note: form.get('note')
-    }
-  };
+  try {
+    assertConfigured();
+    const form = new FormData(elements.expenseForm);
+    const payload = {
+      action: 'addExpense',
+      expense: {
+        date: form.get('date'),
+        amount: Number(form.get('amount')),
+        currency: 'TWD',
+        category: form.get('category'),
+        paymentMethod: form.get('paymentMethod'),
+        vendor: form.get('vendor'),
+        note: form.get('note')
+      }
+    };
 
-  setStatus('新增中...');
-  await requestApi('', {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify(payload)
-  });
+    setStatus('新增中...');
+    await requestApi('', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload)
+    });
 
-  elements.expenseForm.reset();
-  elements.expenseForm.elements.date.value = new Date().toISOString().slice(0, 10);
-  setStatus('已新增');
-  await loadDashboard();
+    elements.expenseForm.reset();
+    elements.expenseForm.elements.date.value = formatDate(new Date());
+    setStatus('已新增');
+    await loadDashboard();
+  } catch (error) {
+    showError(error.message || '新增失敗');
+  }
 }
 
 async function requestApi(path, options = {}) {
   const response = await fetch(`${API_URL}${path}`, options);
   const json = await response.json();
-  if (!json.ok) {
-    const message = json.error?.message || 'API request failed';
+
+  if (!response.ok || !json.ok) {
+    const message = json.error?.message || `API 錯誤：${response.status}`;
     throw new Error(message);
   }
+
   return json;
 }
 
@@ -115,14 +135,15 @@ function renderCategories(categories) {
   }
 
   elements.categoryBreakdown.innerHTML = categories
+    .slice()
     .sort((a, b) => b.total - a.total)
     .map(item => `
       <div class="category-item">
-        <strong>${escapeHtml(item.category)}</strong>
+        <strong title="${escapeHtml(item.category)}">${escapeHtml(item.category)}</strong>
         <div class="bar-track" aria-hidden="true">
-          <div class="bar-fill" style="width: ${Math.min(item.percentage, 100)}%"></div>
+          <div class="bar-fill" style="width: ${Math.min(Number(item.percentage) || 0, 100)}%"></div>
         </div>
-        <span>${item.percentage}%</span>
+        <span class="category-total">${money.format(item.total || 0)} · ${item.percentage || 0}%</span>
       </div>
     `)
     .join('');
@@ -135,12 +156,13 @@ function renderRows(expenses) {
   }
 
   elements.expenseRows.innerHTML = expenses
+    .slice()
     .sort((a, b) => String(b.date).localeCompare(String(a.date)))
     .map(expense => `
-      <tr>
+      <tr class="${expense.isHighExpense ? 'high-expense' : ''}">
         <td>${escapeHtml(expense.date)}</td>
         <td>${escapeHtml(expense.category)}</td>
-        <td class="amount ${expense.isHighExpense ? 'high-expense' : ''}">${money.format(expense.amount || 0)}</td>
+        <td class="amount">${money.format(expense.amount || 0)}</td>
         <td>${escapeHtml(expense.note || expense.vendor || '')}</td>
       </tr>
     `)
@@ -149,6 +171,11 @@ function renderRows(expenses) {
 
 function setStatus(message) {
   elements.formStatus.textContent = message;
+}
+
+function showError(message) {
+  setStatus(message);
+  console.error(message);
 }
 
 function emptySummary() {
@@ -168,15 +195,19 @@ function assertConfigured() {
   }
 }
 
+function formatDate(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function formatMonth(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
 function escapeHtml(value) {
-  return String(value)
+  return String(value ?? '')
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#039;');
 }
-
-window.addEventListener('unhandledrejection', event => {
-  setStatus(event.reason?.message || '發生錯誤');
-});
